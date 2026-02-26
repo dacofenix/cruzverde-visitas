@@ -171,16 +171,13 @@ e.preventDefault();
 const data = collectData();
 const btn = document.getElementById('btnSubmit');
 data.id = Date.now().toString();
-// Backup local
 const visits = JSON.parse(localStorage.getItem('vl_visits') || '[]');
 visits.push(data);
 localStorage.setItem('vl_visits', JSON.stringify(visits));
 btn.disabled = true;
 btn.querySelector('span').textContent = '⏳ Guardando...';
 try {
-// Enviar visita principal
 await gsSend({...data, type: 'visita'});
-// Enviar cada incidencia
 for (const inc of (data.incidencias || [])) {
 await gsSend({
 type: 'incidencia',
@@ -197,22 +194,19 @@ fecha_seguimiento: inc.fecha_seguimiento,
 estado: inc.estado || 'Pendiente'
 });
 }
-showToast('✅ Visita guardada correctamente');
+showToast('✅ Visita guardada correctamente en Google Sheets');
 resetForm();
 } catch (err) {
 console.error(err);
 showToast('⚠ ' + err.message, 'error');
 btn.disabled = false;
-btn.querySelector('span').textContent = '📤 Guardar';
+btn.querySelector('span').textContent = '📤 Guardar Visita';
 }
 }
 async function gsSend(payload) {
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzVm3Ei7HtktS5m-577dEpP2PE98b71bhV28vuAfJtR6ll_YGfn4H5RerFAPpetbg/exec';
-const r = await fetch(SCRIPT_URL, {
-method: 'POST',
-headers: { 'Content-Type': 'text/plain' },
-body: JSON.stringify(payload)
-});
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxuMCVTbSI9CY81LS8cE9-7Fcc2Ricm-W2-MHfa5GTPPsQK-hWtNKMjMviUmnG5D9pK/exec';
+const params = new URLSearchParams({data: JSON.stringify(payload)});
+const r = await fetch(SCRIPT_URL + '?' + params);
 if (!r.ok) throw new Error('Error al guardar (' + r.status + ')');
 const json = await r.json();
 if (json.status === 'error') throw new Error(json.message);
