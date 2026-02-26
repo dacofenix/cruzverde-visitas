@@ -6,7 +6,7 @@ let incidenciasMap = {};
 async function loadData() {
 showLoading(true);
 try {
-if (!SHAREPOINT_SITE_URL || SHAREPOINT_SITE_URL === 'PEGAR_URL_DEL_SITIO') {
+if (!SHAREPOINT_SITE_URL || SHAREPOINT_SITE_URL === 'https://gruposocofar.sharepoint.com/sites/IndicadoresExpansi') {
 const raw = localStorage.getItem('vl_visits');
 visits = raw ? JSON.parse(raw) : [];
 if (visits.length === 0) injectDemo();
