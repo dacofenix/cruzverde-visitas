@@ -121,7 +121,7 @@ visits.forEach(v => {
 if (inc.criticidad === 'Alta') altas++;
 if (inc.estado !== 'Resuelto') pendientes++;
 if (inc.fecha_seguimiento && inc.estado !== 'Resuelto') {
-const fd = new Date(inc.fecha_seguimiento + 'T00:00:00');
+const fd = parseDate(inc.fecha_seguimiento);
 if (fd <= week) vencen++;
 }
 });
@@ -138,7 +138,7 @@ const alerts = [];
 visits.forEach(v => {
 (v.incidencias || []).forEach(inc => {
 if (inc.estado === 'Resuelto' || !inc.fecha_seguimiento) return;
-const fd = new Date(inc.fecha_seguimiento + 'T00:00:00');
+const fd = parseDate(inc.fecha_seguimiento);
 if (fd <= threeDays) {
 const diff = Math.round((fd - now) / 86400000);
 let label = diff < 0 ? `${v.nombre}: VENCIDA (${inc.tipo})` : diff === 0 ? `${v.nombre}: VENCE HOY (${inc.tipo})` : `${v.nombre}: vence en ${diff}d (${inc.tipo})`;
@@ -216,7 +216,7 @@ const estado = (inc.estado || 'Pendiente').toLowerCase().replace(' ', '-');
 const estadoLabel = inc.estado || 'Pendiente';
 let fechaHtml = '—';
 if (inc.fecha_seguimiento) {
-const fd = new Date(inc.fecha_seguimiento + 'T00:00:00');
+const fd = parseDate(inc.fecha_seguimiento);
 const diff = Math.round((fd - now) / 86400000);
 let cls = 'ok', label = fd.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' });
 if (diff < 0) { cls = 'vencida'; label = `⚠ Vencida (${Math.abs(diff)}d)`; }
@@ -245,7 +245,7 @@ return;
 const tbody = filtered.map(v => {
 const altas = (v.incidencias || []).filter(i => i.criticidad === 'Alta').length;
 const cal = v.gen_calificacion?.split(' ')[0] || '—';
-const fechaV = v.fecha_visita ? new Date(v.fecha_visita + 'T00:00:00').toLocaleDateString('es-CO', { day:'2-digit', month:'short', year:'2-digit'}) : '—';
+const fechaV = v.fecha_visita ? parseDate(v.fecha_visita).toLocaleDateString('es-CO', { day:'2-digit', month:'short', year:'2-digit'}) : '—';
 return `<tr onclick="showVisitDetail('${v.id}')" style="cursor:pointer"><td><strong>${v.codigo || '—'}</strong></td><td>${v.nombre || '—'}<br><span style="font-size:0.76rem;color:var(--text-muted)">${v.lider || ''}</span></td><td>${v.ciudad || '—'}</td><td>${fechaV}</td><td><span class="cal-stars">${cal}</span></td><td>${v.num_incidencias || 0} ${altas > 0 ? `<span style="color:var(--danger);font-size:0.75rem;font-weight:600">(${altas} alta${altas>1?'s':''})</span>` : ''}</td><td style="font-size:0.78rem;color:var(--text-muted)">${v.auditor || '—'}</td><td><button class="btn-pdf" onclick="event.stopPropagation();showVisitDetail('${v.id}')">Ver</button></td></tr>`;
 }).join('');
 document.getElementById('visitasTable').innerHTML = `
@@ -255,11 +255,11 @@ function showVisitDetail(id) {
 const v = visits.find(x => x.id === id);
 if (!v) return;
 document.getElementById('modalTitle').textContent = `${v.codigo} — ${v.nombre}`;
-const fechaV = v.fecha_visita ? new Date(v.fecha_visita + 'T00:00:00').toLocaleDateString('es-CO', { weekday:'long', day:'2-digit', month:'long', year:'numeric'}) : '—';
+const fechaV = v.fecha_visita ? parseDate(v.fecha_visita).toLocaleDateString('es-CO', { weekday:'long', day:'2-digit', month:'long', year:'numeric'}) : '—';
 const incsHtml = (v.incidencias || []).map((inc, i) => {
 const crit = inc.criticidad?.toLowerCase() || '';
 const estado = (inc.estado || '').toLowerCase().replace(' ', '-');
-const fd = inc.fecha_seguimiento ? new Date(inc.fecha_seguimiento + 'T00:00:00').toLocaleDateString('es-CO', {day:'2-digit',month:'short',year:'2-digit'}) : '—';
+const fd = inc.fecha_seguimiento ? parseDate(inc.fecha_seguimiento).toLocaleDateString('es-CO', {day:'2-digit',month:'short',year:'2-digit'}) : '—';
 return `<div class="inc-detail"><div class="inc-detail-head"><strong>#${i+1} ${inc.tipo || 'Incidencia'}</strong><div style="display:flex;gap:6px"><span class="badge-crit badge-${crit}">${inc.criticidad || '—'}</span><span class="badge-estado estado-${estado}">${inc.estado || '—'}</span></div></div><p style="font-size:0.85rem;margin-bottom:10px;color:var(--text)">${inc.descripcion || '—'}</p><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:0.78rem;color:var(--text-muted)"><span><strong>Responsable:</strong><br>${inc.responsable || '—'}</span><span><strong>Área:</strong><br>${inc.area || '—'}</span><span><strong>📅 Fecha límite:</strong><br><strong style="color:var(--text)">${fd}</strong></span></div></div>`;
 }).join('') || '<p style="color:var(--text-muted);font-size:0.85rem">Sin incidencias registradas</p>';
 document.getElementById('modalBody').innerHTML = `
