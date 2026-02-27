@@ -171,6 +171,32 @@ visits.push(data);
 localStorage.setItem('vl_visits', JSON.stringify(visits));
 btn.disabled = true;
 btn.querySelector('span').textContent = '⏳ Guardando...';
+// Subir fotos a Google Drive
+const fotosUrls = [];
+try {
+  btn.querySelector('span').textContent = '📷 Subiendo fotos...';
+  for (const [section, files] of Object.entries(mediaStore)) {
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) continue;
+      const base64 = await new Promise((res, rej) => {
+        const rd = new FileReader();
+        rd.onload = ev => res(ev.target.result);
+        rd.onerror = rej;
+        rd.readAsDataURL(file);
+      });
+      const resp = await gsSend({
+        type: 'upload_foto',
+        visita_id: data.id,
+        section: section,
+        base64: base64,
+        mime: file.type,
+        nombre: section + '_' + Date.now() + '.jpg'
+      });
+      if (resp.url) fotosUrls.push(section + '::' + resp.url);
+    }
+  }
+} catch(photoErr) { console.warn('Error subiendo fotos:', photoErr); }
+data.fotos_urls = fotosUrls.join('|');
 try {
 await gsSend({...data, type: 'visita'});
 for (const inc of (data.incidencias || [])) {
@@ -192,7 +218,7 @@ btn.querySelector('span').textContent = '📤 Guardar Visita';
 }
 }
 async function gsSend(payload) {
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwTDaRZIQLST72kYHEoQvwiHclL3L_lGDbzUZH3YGBwSjxP3l7fZw81CMABHlQBaR6K/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxEp4P6zZtrJ732Myh-Z9y_1Ruoskhk2PILcm16NZMqr1EJ3ALgtxnpHuiGlAocbDvv/exec';
 const params = new URLSearchParams({data: JSON.stringify(payload)});
 const r = await fetch(SCRIPT_URL + '?' + params);
 if (!r.ok) throw new Error('Error al guardar (' + r.status + ')');
