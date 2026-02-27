@@ -219,8 +219,17 @@ btn.querySelector('span').textContent = '📤 Guardar Visita';
 }
 async function gsSend(payload) {
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxEp4P6zZtrJ732Myh-Z9y_1Ruoskhk2PILcm16NZMqr1EJ3ALgtxnpHuiGlAocbDvv/exec';
+let r;
+if (payload.type === 'upload_foto') {
+r = await fetch(SCRIPT_URL, {
+method: 'POST',
+headers: {'Content-Type': 'text/plain'},
+body: JSON.stringify(payload)
+});
+} else {
 const params = new URLSearchParams({data: JSON.stringify(payload)});
-const r = await fetch(SCRIPT_URL + '?' + params);
+r = await fetch(SCRIPT_URL + '?' + params);
+}
 if (!r.ok) throw new Error('Error al guardar (' + r.status + ')');
 const json = await r.json();
 if (json.status === 'error') throw new Error(json.message);
