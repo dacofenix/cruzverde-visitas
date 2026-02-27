@@ -246,7 +246,7 @@ const tbody = filtered.map(v => {
 const altas = (v.incidencias || []).filter(i => i.criticidad === 'Alta').length;
 const cal = v.gen_calificacion?.split(' ')[0] || '—';
 const fechaV = v.fecha_visita ? parseDate(v.fecha_visita).toLocaleDateString('es-CO', { day:'2-digit', month:'short', year:'2-digit'}) : '—';
-return `<tr onclick="showVisitDetail('${v.id}')" style="cursor:pointer"><td><strong>${v.codigo || '—'}</strong></td><td>${v.nombre || '—'}<br><span style="font-size:0.76rem;color:var(--text-muted)">${v.lider || ''}</span></td><td>${v.ciudad || '—'}</td><td>${fechaV}</td><td><span class="cal-stars">${cal}</span></td><td>${v.num_incidencias || 0} ${altas > 0 ? `<span style="color:var(--danger);font-size:0.75rem;font-weight:600">(${altas} alta${altas>1?'s':''})</span>` : ''}</td><td style="font-size:0.78rem;color:var(--text-muted)">${v.auditor || '—'}</td><td><button class="btn-pdf" onclick="event.stopPropagation();showVisitDetail('${v.id}')">Ver</button></td></tr>`;
+return `<tr onclick="showVisitDetail('${v.id}')" style="cursor:pointer"><td><strong>${v.codigo || '—'}</strong></td><td>${v.nombre || '—'}<br><span style="font-size:0.76rem;color:var(--text-muted)">${v.lider || ''}</span></td><td>${v.ciudad || '—'}</td><td>${fechaV}</td><td><span class="cal-stars">${cal}</span></td><td>${v.num_incidencias || 0} ${altas > 0 ? `<span style="color:var(--danger);font-size:0.75rem;font-weight:600">(${altas} alta${altas>1?'s':''})</span>` : ''}</td><td style="font-size:0.78rem;color:var(--text-muted)">${v.auditor || '—'}</td><td><button class="btn-pdf" onclick="event.stopPropagation();exportPDF('${v.id}')">📄 Informe PDF</button></td></tr>`;
 }).join('');
 document.getElementById('visitasTable').innerHTML = `
 <table><thead><tr><th>Código</th><th>Local / Líder</th><th>Ciudad</th><th>Fecha Visita</th><th>Calificación</th><th>Incidencias</th><th>Auditor</th><th></th></tr></thead><tbody>${tbody}</tbody></table>`;
@@ -267,7 +267,7 @@ document.getElementById('modalBody').innerHTML = `
 ${incsHtml}
 </div>
 ${v.compromisos ? `<div class="modal-section"><h3>Compromisos Pactados</h3><p style="font-size:0.88rem;line-height:1.6">${v.compromisos}</p></div>` : ''}
-<div style="display:flex;gap:10px;justify-content:flex-end"><button class="btn-pdf" onclick="printVisit('${v.id}')">🖨 Imprimir reporte</button><button class="btn-pdf" style="background:var(--accent2)" onclick="closeModal()">Cerrar</button></div>`;
+<div style="display:flex;gap:10px;justify-content:flex-end"><button class="btn-pdf" onclick="exportPDF('${v.id}')">📄 Exportar PDF</button><button class="btn-pdf" style="background:var(--accent2)" onclick="closeModal()">Cerrar</button></div>`;
 document.getElementById('detailModal').classList.remove('hidden');
 }
 function closeModal() { document.getElementById('detailModal').classList.add('hidden'); }
@@ -348,6 +348,142 @@ async function updateEstado(selectEl) {
   } catch(err) {
     showToast('Error: ' + err.message, 'error');
   } finally { selectEl.disabled = false; }
+}
+
+function exportPDF(vid) {
+  const v = visits.find(x => String(x.id) === String(vid));
+  if (!v) return;
+  const fmt = (val) => {
+    const d = parseDate(val);
+    if (!d || isNaN(d)) return val || '—';
+    return d.toLocaleDateString('es-CO', {day:'2-digit',month:'long',year:'numeric'});
+  };
+  const score = (val) => {
+    const map = {Excelente:'⭐⭐⭐⭐⭐',Bueno:'⭐⭐⭐⭐',Regular:'⭐⭐⭐',Deficiente:'⭐⭐',Critico:'⭐'};
+    return map[val] || val || '—';
+  };
+  const critColor = (c) => c==='Alta'?'#c0392b':c==='Media'?'#d4a000':'#145214';
+  const estadoColor = (e) => e==='Resuelto'?'#145214':e==='En proceso'?'#1d4ed8':'#d4a000';
+
+  const incsHTML = (v.incidencias||[]).length === 0
+    ? '<p style="color:#999;font-style:italic;">Sin incidencias registradas</p>'
+    : (v.incidencias||[]).map((inc,i) => `
+      <div style="border:1px solid #e0e0e0;border-radius:8px;padding:14px;margin-bottom:10px;background:#fafafa;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <strong style="font-size:14px;">#${i+1} — ${inc.tipo||'—'}</strong>
+          <span style="background:${critColor(inc.criticidad)}22;color:${critColor(inc.criticidad)};padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;">${inc.criticidad||'—'}</span>
+        </div>
+        <p style="font-size:13px;margin-bottom:10px;color:#333;">${inc.descripcion||'—'}</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:12px;color:#666;">
+          <span><strong>Responsable:</strong><br>${inc.responsable||'—'}</span>
+          <span><strong>Área:</strong><br>${inc.area||'—'}</span>
+          <span><strong>Fecha límite:</strong><br>${fmt(inc.fecha_seguimiento)}</span>
+        </div>
+        <div style="margin-top:8px;">
+          <span style="background:${estadoColor(inc.estado)}22;color:${estadoColor(inc.estado)};padding:2px 10px;border-radius:20px;font-size:12px;font-weight:700;">${inc.estado||'Pendiente'}</span>
+        </div>
+      </div>`).join('');
+
+  const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<title>Informe Visita — ${v.codigo} ${v.nombre}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Syne:wght@700;800&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', sans-serif; color: #1c1a17; background: #fff; }
+  .header { background: linear-gradient(135deg,#1a6e1a,#2e8b2e); color: #fff; padding: 28px 36px; display: flex; align-items: center; justify-content: space-between; }
+  .header h1 { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800; }
+  .header p { font-size: 12px; opacity: 0.75; margin-top: 4px; }
+  .yellow-bar { background: #f5c800; height: 5px; }
+  .body { padding: 32px 36px; max-width: 800px; margin: 0 auto; }
+  .section { margin-bottom: 28px; }
+  .section-title { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #2e8b2e; border-bottom: 2px solid #2e8b2e; padding-bottom: 6px; margin-bottom: 14px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  .field label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #888; display: block; margin-bottom: 2px; }
+  .field p { font-size: 13px; font-weight: 500; color: #222; }
+  .score-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+  .score-row:last-child { border-bottom: none; }
+  .score-label { color: #555; }
+  .compromiso { background: #f4f8f4; border-left: 4px solid #2e8b2e; padding: 12px 16px; border-radius: 0 8px 8px 0; font-size: 13px; color: #333; }
+  .footer { background: #f4f8f4; border-top: 1px solid #e0e0e0; padding: 20px 36px; display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #888; }
+  .btn-print { background: #2e8b2e; color: #fff; border: none; padding: 10px 22px; border-radius: 8px; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 14px; cursor: pointer; }
+  @media print { .btn-print, .no-print { display: none !important; } body { background: #fff; } }
+</style>
+</head><body>
+<div class="yellow-bar"></div>
+<div class="header">
+  <div>
+    <h1>📋 Informe de Visita a Local</h1>
+    <p>Cruz Verde — Sistema de Auditoría Operativa · Generado el ${new Date().toLocaleDateString('es-CO',{day:'2-digit',month:'long',year:'numeric'})}</p>
+  </div>
+  <button class="btn-print no-print" onclick="window.print()">🖨 Guardar PDF</button>
+</div>
+<div class="body">
+
+  <div class="section">
+    <div class="section-title">📍 Identificación del Local</div>
+    <div class="grid2">
+      <div class="field"><label>Código</label><p>${v.codigo||'—'}</p></div>
+      <div class="field"><label>Nombre del Local</label><p>${v.nombre||'—'}</p></div>
+      <div class="field"><label>Ciudad</label><p>${v.ciudad||'—'}</p></div>
+      <div class="field"><label>Líder del Local</label><p>${v.lider||'—'}</p></div>
+      <div class="field"><label>Fecha de Visita</label><p>${fmt(v.fecha_visita)}</p></div>
+      <div class="field"><label>Hora</label><p>${v.hora_visita||'—'}</p></div>
+      <div class="field"><label>Visitador / Auditor</label><p>${v.auditor||'—'}</p></div>
+      <div class="field"><label>Próxima Visita</label><p>${fmt(v.proxima_visita)}</p></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">🏪 Evaluación de Operaciones</div>
+    <div style="background:#fafafa;border:1px solid #e0e0e0;border-radius:8px;padding:16px;">
+      <p style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;margin-bottom:10px;">Sala de Venta</p>
+      <div class="score-row"><span class="score-label">Piso / Orden</span><span>${score(v.sala_piso)}</span></div>
+      <div class="score-row"><span class="score-label">Limpieza</span><span>${score(v.sala_limpieza)}</span></div>
+      <div class="score-row"><span class="score-label">Exhibición</span><span>${score(v.sala_exhibicion)}</span></div>
+      <div class="score-row"><span class="score-label">Material POP</span><span>${score(v.sala_pop)}</span></div>
+      ${v.sala_obs ? `<div class="score-row"><span class="score-label">Observaciones</span><span style="color:#555;font-size:12px;">${v.sala_obs}</span></div>` : ''}
+      <p style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;margin:14px 0 10px;">Bodega</p>
+      <div class="score-row"><span class="score-label">Organización</span><span>${score(v.bod_org)}</span></div>
+      <div class="score-row"><span class="score-label">Inventario</span><span>${score(v.bod_inv)}</span></div>
+      <div class="score-row"><span class="score-label">Condiciones</span><span>${score(v.bod_cond)}</span></div>
+      <div class="score-row"><span class="score-label">Seguridad</span><span>${score(v.bod_seg)}</span></div>
+      ${v.bod_obs ? `<div class="score-row"><span class="score-label">Observaciones</span><span style="color:#555;font-size:12px;">${v.bod_obs}</span></div>` : ''}
+      <p style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;margin:14px 0 10px;">Gestión Comercial</p>
+      <div class="score-row"><span class="score-label">Metas</span><span>${score(v.com_metas)}</span></div>
+      <div class="score-row"><span class="score-label">Flujo de Caja</span><span>${score(v.com_flujo)}</span></div>
+      <div class="score-row"><span class="score-label">Servicio al Cliente</span><span>${score(v.com_servicio)}</span></div>
+      <div class="score-row"><span class="score-label">Estrategias</span><span>${score(v.com_estrategias)}</span></div>
+      ${v.com_obs ? `<div class="score-row"><span class="score-label">Observaciones</span><span style="color:#555;font-size:12px;">${v.com_obs}</span></div>` : ''}
+      <p style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;margin:14px 0 10px;">General</p>
+      <div class="score-row"><span class="score-label">Infraestructura</span><span>${score(v.gen_infra)}</span></div>
+      <div class="score-row"><span class="score-label">Personal</span><span>${score(v.gen_personal)}</span></div>
+      <div class="score-row"><span class="score-label">Protocolos</span><span>${score(v.gen_protocolos)}</span></div>
+      <div class="score-row"><span class="score-label">Calificación General</span><span style="font-weight:700;color:#2e8b2e;">${v.gen_calificacion||'—'}</span></div>
+      ${v.gen_obs ? `<div class="score-row"><span class="score-label">Observaciones</span><span style="color:#555;font-size:12px;">${v.gen_obs}</span></div>` : ''}
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">⚠ Incidencias Encontradas (${(v.incidencias||[]).length})</div>
+    ${incsHTML}
+  </div>
+
+  <div class="section">
+    <div class="section-title">📝 Compromisos Pactados</div>
+    <div class="compromiso">${v.compromisos || 'Sin compromisos registrados.'}</div>
+  </div>
+
+</div>
+<div class="footer">
+  <span>Cruz Verde — Sistema de Auditoría de Locales</span>
+  <span>Visita #${v.codigo} · ${v.nombre} · ${v.ciudad}</span>
+</div>
+</body></html>`;
+
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
 }
 
 </script><div style="text-align:center;padding:20px;font-size:0.75rem;color:#7a9a7a;border-top:1px solid #c2ddc2;margin-top:20px;">
