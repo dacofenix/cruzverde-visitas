@@ -354,24 +354,32 @@ async function updateEstado(selectEl) {
 function exportPDF(vid) {
   const v = visits.find(x => String(x.id) === String(vid));
   if (!v) return;
+
+  // Abrir ventana inmediatamente (evita bloqueo del navegador)
+  const win = window.open('', '_blank');
+  if (!win) { showToast('⚠ Permite ventanas emergentes en tu navegador', 'error'); return; }
+  win.document.write('<html><body style="font-family:sans-serif;padding:40px;text-align:center;color:#1a6e1a;"><p style="font-size:20px;">⏳ Generando informe...</p></body></html>');
+
+  // Helpers
   const fmt = (val) => {
     const d = parseDate(val);
     if (!d || isNaN(d)) return val || '—';
-    return d.toLocaleDateString('es-CO', {day:'2-digit',month:'long',year:'numeric'});
+    return d.toLocaleDateString('es-CO', {day:'2-digit', month:'long', year:'numeric'});
   };
   const score = (val) => {
-    const map = {Excelente:'⭐⭐⭐⭐⭐',Bueno:'⭐⭐⭐⭐',Regular:'⭐⭐⭐',Deficiente:'⭐⭐',Critico:'⭐'};
+    const map = {Excelente:'⭐⭐⭐⭐⭐', Bueno:'⭐⭐⭐⭐', Regular:'⭐⭐⭐', Deficiente:'⭐⭐', Critico:'⭐'};
     return map[val] || val || '—';
   };
-  const critColor = (c) => c==='Alta'?'#c0392b':c==='Media'?'#d4a000':'#145214';
-  const estadoColor = (e) => e==='Resuelto'?'#145214':e==='En proceso'?'#1d4ed8':'#d4a000';
+  const critColor = (x) => x==='Alta'?'#c0392b':x==='Media'?'#d4a000':'#145214';
+  const estadoColor = (x) => x==='Resuelto'?'#145214':x==='En proceso'?'#1d4ed8':'#d4a000';
 
+  // Incidencias HTML
   const incsHTML = (v.incidencias||[]).length === 0
     ? '<p style="color:#999;font-style:italic;">Sin incidencias registradas</p>'
-    : (v.incidencias||[]).map((inc,i) => `
+    : (v.incidencias||[]).map((inc, i) => `
       <div style="border:1px solid #e0e0e0;border-radius:8px;padding:14px;margin-bottom:10px;background:#fafafa;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <strong style="font-size:14px;">#${i+1} — ${inc.tipo||'—'}</strong>
+          <strong>#${i+1} — ${inc.tipo||'—'}</strong>
           <span style="background:${critColor(inc.criticidad)}22;color:${critColor(inc.criticidad)};padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;">${inc.criticidad||'—'}</span>
         </div>
         <p style="font-size:13px;margin-bottom:10px;color:#333;">${inc.descripcion||'—'}</p>
@@ -385,32 +393,59 @@ function exportPDF(vid) {
         </div>
       </div>`).join('');
 
+  // Fotos HTML (desde URLs de Drive guardadas en Sheets)
+  let fotosHTML = '<p style="color:#999;font-style:italic;">Sin evidencia fotográfica registrada</p>';
+  try {
+    const fotosRaw = v.fotos_urls || '';
+    if (fotosRaw) {
+      const sectionNames = {sala:'🛍 Sala de Venta', bodegas:'📦 Bodegas', comercial:'📈 Actividad Comercial', general:'📋 General'};
+      const fotoMap = {};
+      fotosRaw.split('|').forEach(entry => {
+        const sep = entry.indexOf('::');
+        if (sep === -1) return;
+        const section = entry.substring(0, sep);
+        const url = entry.substring(sep + 2);
+        if (!fotoMap[section]) fotoMap[section] = [];
+        fotoMap[section].push(url);
+      });
+      let allHtml = '';
+      for (const [section, imgs] of Object.entries(fotoMap)) {
+        if (!imgs || imgs.length === 0) continue;
+        allHtml += `<p style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;margin:10px 0 8px;">${sectionNames[section]||section}</p>`;
+        allHtml += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">';
+        imgs.forEach(src => {
+          allHtml += `<img src="${src}" style="width:100%;height:140px;object-fit:cover;border-radius:6px;border:1px solid #e0e0e0;">`;
+        });
+        allHtml += '</div>';
+      }
+      if (allHtml) fotosHTML = allHtml;
+    }
+  } catch(e) { console.warn('Fotos no disponibles:', e); }
+
+  // Construir HTML del informe
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <title>Informe Visita — ${v.codigo} ${v.nombre}</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Syne:wght@700;800&display=swap');
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'DM Sans', sans-serif; color: #1c1a17; background: #fff; }
-  .header { background: linear-gradient(135deg,#1a6e1a,#2e8b2e); color: #fff; padding: 28px 36px; display: flex; align-items: center; justify-content: space-between; }
-  .header h1 { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800; }
-  .header p { font-size: 12px; opacity: 0.75; margin-top: 4px; }
-  .yellow-bar { background: #f5c800; height: 5px; }
-  .body { padding: 32px 36px; max-width: 800px; margin: 0 auto; }
-  .section { margin-bottom: 28px; }
-  .section-title { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #2e8b2e; border-bottom: 2px solid #2e8b2e; padding-bottom: 6px; margin-bottom: 14px; }
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
-  .field label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #888; display: block; margin-bottom: 2px; }
-  .field p { font-size: 13px; font-weight: 500; color: #222; }
-  .score-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
-  .score-row:last-child { border-bottom: none; }
-  .score-label { color: #555; }
-  .compromiso { background: #f4f8f4; border-left: 4px solid #2e8b2e; padding: 12px 16px; border-radius: 0 8px 8px 0; font-size: 13px; color: #333; }
-  .footer { background: #f4f8f4; border-top: 1px solid #e0e0e0; padding: 20px 36px; display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #888; }
-  .btn-print { background: #2e8b2e; color: #fff; border: none; padding: 10px 22px; border-radius: 8px; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 14px; cursor: pointer; }
-  @media print { .btn-print, .no-print { display: none !important; } body { background: #fff; } }
-</style>
-</head><body>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:'DM Sans',sans-serif; color:#1c1a17; background:#fff; }
+  .header { background:linear-gradient(135deg,#1a6e1a,#2e8b2e); color:#fff; padding:28px 36px; display:flex; align-items:center; justify-content:space-between; }
+  .header h1 { font-family:'Syne',sans-serif; font-size:20px; font-weight:800; }
+  .header p { font-size:12px; opacity:0.75; margin-top:4px; }
+  .yellow-bar { background:#f5c800; height:5px; }
+  .body { padding:32px 36px; max-width:800px; margin:0 auto; }
+  .section { margin-bottom:28px; }
+  .section-title { font-family:'Syne',sans-serif; font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; color:#2e8b2e; border-bottom:2px solid #2e8b2e; padding-bottom:6px; margin-bottom:14px; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .field label { font-size:11px; text-transform:uppercase; letter-spacing:0.5px; color:#888; display:block; margin-bottom:2px; }
+  .field p { font-size:13px; font-weight:500; color:#222; }
+  .score-row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #f0f0f0; font-size:13px; }
+  .score-row:last-child { border-bottom:none; }
+  .compromiso { background:#f4f8f4; border-left:4px solid #2e8b2e; padding:12px 16px; border-radius:0 8px 8px 0; font-size:13px; color:#333; }
+  .footer { background:#f4f8f4; border-top:1px solid #e0e0e0; padding:20px 36px; display:flex; justify-content:space-between; font-size:11px; color:#888; }
+  .btn-print { background:#2e8b2e; color:#fff; border:none; padding:10px 22px; border-radius:8px; font-family:'Syne',sans-serif; font-weight:700; font-size:14px; cursor:pointer; }
+  @media print { .btn-print, .no-print { display:none !important; } }
+</style></head><body>
 <div class="yellow-bar"></div>
 <div class="header">
   <div>
@@ -420,7 +455,6 @@ function exportPDF(vid) {
   <button class="btn-print no-print" onclick="window.print()">🖨 Guardar PDF</button>
 </div>
 <div class="body">
-
   <div class="section">
     <div class="section-title">📍 Identificación del Local</div>
     <div class="grid2">
@@ -430,56 +464,51 @@ function exportPDF(vid) {
       <div class="field"><label>Líder del Local</label><p>${v.lider||'—'}</p></div>
       <div class="field"><label>Fecha de Visita</label><p>${fmt(v.fecha_visita)}</p></div>
       <div class="field"><label>Hora</label><p>${v.hora_visita||'—'}</p></div>
-      <div class="field"><label>Visitador / Auditor</label><p>${v.auditor||'—'}</p></div>
+      <div class="field"><label>Auditor</label><p>${v.auditor||'—'}</p></div>
       <div class="field"><label>Próxima Visita</label><p>${fmt(v.proxima_visita)}</p></div>
     </div>
   </div>
-
   <div class="section">
     <div class="section-title">🏪 Evaluación de Operaciones</div>
     <div style="background:#fafafa;border:1px solid #e0e0e0;border-radius:8px;padding:16px;">
       <p style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;margin-bottom:10px;">Sala de Venta</p>
-      <div class="score-row"><span class="score-label">Piso / Orden</span><span>${score(v.sala_piso)}</span></div>
-      <div class="score-row"><span class="score-label">Limpieza</span><span>${score(v.sala_limpieza)}</span></div>
-      <div class="score-row"><span class="score-label">Exhibición</span><span>${score(v.sala_exhibicion)}</span></div>
-      <div class="score-row"><span class="score-label">Material POP</span><span>${score(v.sala_pop)}</span></div>
-      ${v.sala_obs ? `<div class="score-row"><span class="score-label">Observaciones</span><span style="color:#555;font-size:12px;">${v.sala_obs}</span></div>` : ''}
+      <div class="score-row"><span>Piso / Orden</span><span>${score(v.sala_piso)}</span></div>
+      <div class="score-row"><span>Limpieza</span><span>${score(v.sala_limpieza)}</span></div>
+      <div class="score-row"><span>Exhibición</span><span>${score(v.sala_exhibicion)}</span></div>
+      <div class="score-row"><span>Material POP</span><span>${score(v.sala_pop)}</span></div>
+      ${v.sala_obs?`<div class="score-row"><span>Observaciones</span><span style="color:#555;font-size:12px;">${v.sala_obs}</span></div>`:''}
       <p style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;margin:14px 0 10px;">Bodega</p>
-      <div class="score-row"><span class="score-label">Organización</span><span>${score(v.bod_org)}</span></div>
-      <div class="score-row"><span class="score-label">Inventario</span><span>${score(v.bod_inv)}</span></div>
-      <div class="score-row"><span class="score-label">Condiciones</span><span>${score(v.bod_cond)}</span></div>
-      <div class="score-row"><span class="score-label">Seguridad</span><span>${score(v.bod_seg)}</span></div>
-      ${v.bod_obs ? `<div class="score-row"><span class="score-label">Observaciones</span><span style="color:#555;font-size:12px;">${v.bod_obs}</span></div>` : ''}
+      <div class="score-row"><span>Organización</span><span>${score(v.bod_org)}</span></div>
+      <div class="score-row"><span>Inventario</span><span>${score(v.bod_inv)}</span></div>
+      <div class="score-row"><span>Condiciones</span><span>${score(v.bod_cond)}</span></div>
+      <div class="score-row"><span>Seguridad</span><span>${score(v.bod_seg)}</span></div>
+      ${v.bod_obs?`<div class="score-row"><span>Observaciones</span><span style="color:#555;font-size:12px;">${v.bod_obs}</span></div>`:''}
       <p style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;margin:14px 0 10px;">Gestión Comercial</p>
-      <div class="score-row"><span class="score-label">Metas</span><span>${score(v.com_metas)}</span></div>
-      <div class="score-row"><span class="score-label">Flujo de Caja</span><span>${score(v.com_flujo)}</span></div>
-      <div class="score-row"><span class="score-label">Servicio al Cliente</span><span>${score(v.com_servicio)}</span></div>
-      <div class="score-row"><span class="score-label">Estrategias</span><span>${score(v.com_estrategias)}</span></div>
-      ${v.com_obs ? `<div class="score-row"><span class="score-label">Observaciones</span><span style="color:#555;font-size:12px;">${v.com_obs}</span></div>` : ''}
+      <div class="score-row"><span>Metas</span><span>${score(v.com_metas)}</span></div>
+      <div class="score-row"><span>Flujo de Caja</span><span>${score(v.com_flujo)}</span></div>
+      <div class="score-row"><span>Servicio al Cliente</span><span>${score(v.com_servicio)}</span></div>
+      <div class="score-row"><span>Estrategias</span><span>${score(v.com_estrategias)}</span></div>
+      ${v.com_obs?`<div class="score-row"><span>Observaciones</span><span style="color:#555;font-size:12px;">${v.com_obs}</span></div>`:''}
       <p style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;margin:14px 0 10px;">General</p>
-      <div class="score-row"><span class="score-label">Infraestructura</span><span>${score(v.gen_infra)}</span></div>
-      <div class="score-row"><span class="score-label">Personal</span><span>${score(v.gen_personal)}</span></div>
-      <div class="score-row"><span class="score-label">Protocolos</span><span>${score(v.gen_protocolos)}</span></div>
-      <div class="score-row"><span class="score-label">Calificación General</span><span style="font-weight:700;color:#2e8b2e;">${v.gen_calificacion||'—'}</span></div>
-      ${v.gen_obs ? `<div class="score-row"><span class="score-label">Observaciones</span><span style="color:#555;font-size:12px;">${v.gen_obs}</span></div>` : ''}
+      <div class="score-row"><span>Infraestructura</span><span>${score(v.gen_infra)}</span></div>
+      <div class="score-row"><span>Personal</span><span>${score(v.gen_personal)}</span></div>
+      <div class="score-row"><span>Protocolos</span><span>${score(v.gen_protocolos)}</span></div>
+      <div class="score-row"><span style="font-weight:700;">Calificación General</span><span style="font-weight:700;color:#2e8b2e;">${v.gen_calificacion||'—'}</span></div>
+      ${v.gen_obs?`<div class="score-row"><span>Observaciones</span><span style="color:#555;font-size:12px;">${v.gen_obs}</span></div>`:''}
     </div>
   </div>
-
   <div class="section">
-    <div class="section-title">⚠ Incidencias Encontradas (${(v.incidencias||[]).length})</div>
+    <div class="section-title">⚠ Incidencias (${(v.incidencias||[]).length})</div>
     ${incsHTML}
   </div>
-
   <div class="section">
     <div class="section-title">📷 Evidencia Fotográfica</div>
     ${fotosHTML}
   </div>
-
   <div class="section">
     <div class="section-title">📝 Compromisos Pactados</div>
-    <div class="compromiso">${v.compromisos || 'Sin compromisos registrados.'}</div>
+    <div class="compromiso">${v.compromisos||'Sin compromisos registrados.'}</div>
   </div>
-
 </div>
 <div class="footer">
   <span>Cruz Verde — Sistema de Auditoría de Locales</span>
@@ -487,36 +516,7 @@ function exportPDF(vid) {
 </div>
 </body></html>`;
 
-
-  // Cargar fotos desde Google Drive (URLs guardadas en Sheets)
-  let fotosHTML = '<p style="color:#999;font-style:italic;">Sin evidencia fotográfica registrada</p>';
-  try {
-    const fotosRaw = v.fotos_urls || '';
-    if (fotosRaw) {
-      const sectionNames = { sala: '🛍 Sala de Venta', bodegas: '📦 Bodegas', comercial: '📈 Actividad Comercial', general: '📋 General' };
-      const fotoMap = {};
-      fotosRaw.split('|').forEach(entry => {
-        const [section, url] = entry.split('::');
-        if (section && url) {
-          if (!fotoMap[section]) fotoMap[section] = [];
-          fotoMap[section].push(url);
-        }
-      });
-      let allHtml = '';
-      for (const [section, imgs] of Object.entries(fotoMap)) {
-        if (!imgs || imgs.length === 0) continue;
-        allHtml += `<p style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;margin:10px 0 8px;">${sectionNames[section] || section}</p>`;
-        allHtml += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">';
-        for (const src of imgs) {
-          allHtml += `<img src="${src}" style="width:100%;height:140px;object-fit:cover;border-radius:6px;border:1px solid #e0e0e0;" crossorigin="anonymous">`;
-        }
-        allHtml += '</div>';
-      }
-      if (allHtml) fotosHTML = allHtml;
-    }
-  } catch(e) { console.warn('No se pudieron cargar fotos:', e); }
-
-  const win = window.open('', '_blank');
+  win.document.open();
   win.document.write(html);
   win.document.close();
 }
