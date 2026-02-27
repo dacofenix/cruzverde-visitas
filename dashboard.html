@@ -27,7 +27,7 @@ gen_infra:r[24],gen_personal:r[25],gen_protocolos:r[26],gen_calificacion:r[27],g
 compromisos:r[29],proxima_visita:r[30],firma:r[31],
 num_incidencias:r[32],incidencias_alta:r[33],
 incidencias:incMap[r[0]]||[]
-})));
+}));
 renderDashboard(allVisits);
 } catch(err) {
 console.error(err);
@@ -306,49 +306,4 @@ if (e.target === this) closeModal();
 });
 setInterval(loadData, 5 * 60 * 1000);</script><div style="text-align:center;padding:20px;font-size:0.75rem;color:#7a9a7a;border-top:1px solid #c2ddc2;margin-top:20px;">
   © Cruz Verde — Sistema de Auditoría de Locales
-</div></body></html>async function submitForm(e) {
-e.preventDefault();
-const data = collectData();
-const btn = document.getElementById('btnSubmit');
-data.id = Date.now().toString();
-const visits = JSON.parse(localStorage.getItem('vl_visits') || '[]');
-visits.push(data);
-localStorage.setItem('vl_visits', JSON.stringify(visits));
-btn.disabled = true;
-btn.querySelector('span').textContent = '⏳ Guardando...';
-try {
-await gsSend({...data, type: 'visita'});
-for (const inc of (data.incidencias || [])) {
-await gsSend({
-type: 'incidencia',
-visita_id: data.id,
-codigo: data.codigo,
-nombre: data.nombre,
-ciudad: data.ciudad,
-tipo: inc.tipo,
-descripcion: inc.descripcion,
-criticidad: inc.criticidad,
-responsable: inc.responsable,
-area: inc.area,
-fecha_seguimiento: inc.fecha_seguimiento,
-estado: inc.estado || 'Pendiente'
-});
-}
-showToast('✅ Visita guardada correctamente en Google Sheets');
-resetForm();
-} catch (err) {
-console.error(err);
-showToast('⚠ ' + err.message, 'error');
-btn.disabled = false;
-btn.querySelector('span').textContent = '📤 Guardar Visita';
-}
-}
-async function gsSend(payload) {
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwTDaRZIQLST72kYHEoQvwiHclL3L_lGDbzUZH3YGBwSjxP3l7fZw81CMABHlQBaR6K/exec';
-const params = new URLSearchParams({data: JSON.stringify(payload)});
-const r = await fetch(SCRIPT_URL + '?' + params);
-if (!r.ok) throw new Error('Error al guardar (' + r.status + ')');
-const json = await r.json();
-if (json.status === 'error') throw new Error(json.message);
-return json;
-}
+</div></body></html>
