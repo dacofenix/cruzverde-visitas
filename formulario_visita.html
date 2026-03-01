@@ -161,6 +161,24 @@ num_incidencias: incidents.length,
 incidencias_alta: incidents.filter(i => i.criticidad === 'Alta').length,
 };
 }
+
+async function resizeImage(file, maxWidth) {
+return new Promise((resolve) => {
+const img = new Image();
+const url = URL.createObjectURL(file);
+img.onload = () => {
+const canvas = document.createElement('canvas');
+let w = img.width, h = img.height;
+if (w > maxWidth) { h = Math.round(h * maxWidth / w); w = maxWidth; }
+canvas.width = w; canvas.height = h;
+canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+URL.revokeObjectURL(url);
+resolve(canvas.toDataURL('image/jpeg', 0.75));
+};
+img.onerror = () => { URL.revokeObjectURL(url); resolve(''); };
+img.src = url;
+});
+}
 async function submitForm(e) {
 e.preventDefault();
 const data = collectData();
@@ -178,18 +196,13 @@ try {
   for (const [section, files] of Object.entries(mediaStore)) {
     for (const file of files) {
       if (!file.type.startsWith('image/')) continue;
-      const base64 = await new Promise((res, rej) => {
-        const rd = new FileReader();
-        rd.onload = ev => res(ev.target.result);
-        rd.onerror = rej;
-        rd.readAsDataURL(file);
-      });
+      const base64 = await resizeImage(file, 900);
       const resp = await gsSend({
         type: 'upload_foto',
         visita_id: data.id,
         section: section,
         base64: base64,
-        mime: file.type,
+        mime: 'image/jpeg',
         nombre: section + '_' + Date.now() + '.jpg'
       });
       if (resp.url) fotosUrls.push(section + '::' + resp.url);
@@ -218,18 +231,60 @@ btn.querySelector('span').textContent = '📤 Guardar Visita';
 }
 }
 async function gsSend(payload) {
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxEp4P6zZtrJ732Myh-Z9y_1Ruoskhk2PILcm16NZMqr1EJ3ALgtxnpHuiGlAocbDvv/exec';
-let r;
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxArygDYGQ6uiXinn1aB85isYoq8gURiueJPmPBsiQuRqAUE65JnrY9bAY6GnENbbRX/exec';
 if (payload.type === 'upload_foto') {
-r = await fetch(SCRIPT_URL, {
-method: 'POST',
-headers: {'Content-Type': 'text/plain'},
-body: JSON.stringify(payload)
-});
-} else {
-const params = new URLSearchParams({data: JSON.stringify(payload)});
-r = await fetch(SCRIPT_URL + '?' + params);
+  // Usar form submit via iframe para evitar bloqueo CORS en POST
+  return new Promise((resolve) => {
+    const iframeId = 'upload_frame_' + Date.now();
+    const iframe = document.createElement('iframe');
+    iframe.name = iframeId;
+    iframe.id = iframeId;
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = SCRIPT_URL;
+    form.target = iframeId;
+    form.style.display = 'none';
+
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'data';
+    input.value = JSON.stringify(payload);
+    form.appendChild(input);
+    document.body.appendChild(form);
+
+    // Leer respuesta del iframe
+    let resolved = false;
+    const timeout = setTimeout(() => {
+      if (!resolved) { resolved = true; resolve({status:'ok', url:''}); cleanup(); }
+    }, 15000);
+
+    iframe.onload = () => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeout);
+      try {
+        const txt = iframe.contentDocument.body.innerText || iframe.contentDocument.body.textContent || '';
+        const j = JSON.parse(txt);
+        resolve(j);
+      } catch(e) { resolve({status:'ok', url:''}); }
+      cleanup();
+    };
+
+    function cleanup() {
+      setTimeout(() => {
+        if (form.parentNode) form.parentNode.removeChild(form);
+        if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+      }, 1000);
+    }
+
+    form.submit();
+  });
 }
+const params = new URLSearchParams({data: JSON.stringify(payload)});
+const r = await fetch(SCRIPT_URL + '?' + params);
 if (!r.ok) throw new Error('Error al guardar (' + r.status + ')');
 const json = await r.json();
 if (json.status === 'error') throw new Error(json.message);
