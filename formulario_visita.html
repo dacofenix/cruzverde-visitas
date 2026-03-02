@@ -272,29 +272,7 @@ if (json.status === 'error') throw new Error(json.message);
 return json;
 }
 
-async function uploadFoto(visita_id, section, base64, mime, nombre) {
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwjRczG39umNvUFIBQYuVSRrV_qiq5F7GtMnFcw3h2iqJvCTuGeMhwfTmlmWvObGVPB/exec';
-return new Promise((resolve) => {
-  const xhr = new XMLHttpRequest();
-  xhr.open('POST', SCRIPT_URL, true);
-  xhr.setRequestHeader('Content-Type', 'text/plain');
-  xhr.timeout = 30000;
-  xhr.onload = () => {
-    try { resolve(JSON.parse(xhr.responseText)); }
-    catch(e) { resolve({status:'ok', url:''}); }
-  };
-  xhr.onerror = () => resolve({status:'ok', url:''});
-  xhr.ontimeout = () => resolve({status:'ok', url:''});
-  xhr.send(JSON.stringify({
-    type: 'upload_foto',
-    visita_id: visita_id,
-    section: section,
-    base64: base64,
-    mime: mime,
-    nombre: nombre
-  }));
-});
-}
+
 function resetForm() {
 document.getElementById('visitForm').reset();
 document.getElementById('incidentWrap').innerHTML = '';
