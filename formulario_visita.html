@@ -245,7 +245,7 @@ for (const [incN, files] of Object.entries(incFotosCopy)) {
   }
 }
 
-const totalFotos = fotosUrls.length + Object.values(incMediaStore).flat().length;
+const totalFotos = fotosUrls.length + Object.values(incFotosCopy).flat().length;
 if (totalFotos > 0) showToast('📷 ' + totalFotos + ' foto(s) guardada(s) en la nube');
 if (confirm('✅ Visita y fotos guardadas. ¿Ver el Dashboard?')) window.location.href = 'dashboard.html';
 }
