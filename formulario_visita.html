@@ -184,111 +184,95 @@ e.preventDefault();
 const data = collectData();
 const btn = document.getElementById('btnSubmit');
 data.id = Date.now().toString();
+data.fotos_urls = '';
+
+// Guardar en localStorage
 const visits = JSON.parse(localStorage.getItem('vl_visits') || '[]');
 visits.push(data);
 localStorage.setItem('vl_visits', JSON.stringify(visits));
+
 btn.disabled = true;
 btn.querySelector('span').textContent = '⏳ Guardando...';
-// Subir fotos a Google Drive
-const fotosUrls = [];
+
 try {
-  btn.querySelector('span').textContent = '📷 Subiendo fotos...';
-  for (const [section, files] of Object.entries(mediaStore)) {
-    for (const file of files) {
-      if (!file.type.startsWith('image/')) continue;
-      const base64 = await resizeImage(file, 900);
-      const resp = await gsSend({
-        type: 'upload_foto',
-        visita_id: data.id,
-        section: section,
-        base64: base64,
-        mime: 'image/jpeg',
-        nombre: section + '_' + Date.now() + '.jpg'
-      });
-      if (resp.url) fotosUrls.push(section + '::' + resp.url);
-    }
+  // 1. Guardar visita e incidencias primero
+  await gsSend({...data, type: 'visita'});
+  for (const inc of (data.incidencias || [])) {
+    await gsSend({
+      type: 'incidencia',
+      visita_id: data.id, codigo: data.codigo, nombre: data.nombre, ciudad: data.ciudad,
+      tipo: inc.tipo, descripcion: inc.descripcion, criticidad: inc.criticidad,
+      responsable: inc.responsable, area: inc.area,
+      fecha_seguimiento: inc.fecha_seguimiento, estado: inc.estado || 'Pendiente'
+    });
   }
-} catch(photoErr) { console.warn('Error subiendo fotos:', photoErr); }
-data.fotos_urls = fotosUrls.join('|');
-try {
-await gsSend({...data, type: 'visita'});
-for (const inc of (data.incidencias || [])) {
-await gsSend({
-type: 'incidencia',
-visita_id: data.id, codigo: data.codigo, nombre: data.nombre, ciudad: data.ciudad,
-tipo: inc.tipo, descripcion: inc.descripcion, criticidad: inc.criticidad,
-responsable: inc.responsable, area: inc.area,
-fecha_seguimiento: inc.fecha_seguimiento, estado: inc.estado || 'Pendiente'
-});
-}
-showToast('✅ Visita guardada correctamente en Google Sheets');
-resetForm();
+  showToast('✅ Visita guardada. Subiendo fotos...');
+
+  // 2. Subir fotos en background (no bloqueante)
+  const visitaId = data.id;
+  uploadFotosBackground(visitaId);
+
+  resetForm();
 } catch (err) {
-console.error(err);
-showToast('⚠ ' + err.message, 'error');
-btn.disabled = false;
-btn.querySelector('span').textContent = '📤 Guardar Visita';
+  console.error(err);
+  showToast('⚠ ' + err.message, 'error');
+  btn.disabled = false;
+  btn.querySelector('span').textContent = '📤 Guardar Visita';
+}
+}
+
+async function uploadFotosBackground(visitaId) {
+const fotosUrls = [];
+for (const [section, files] of Object.entries(mediaStore)) {
+  for (const file of files) {
+    if (!file.type.startsWith('image/')) continue;
+    try {
+      const base64 = await resizeImage(file, 900);
+      if (!base64) continue;
+      const resp = await uploadFoto(visitaId, section, base64, 'image/jpeg', section + '_' + Date.now() + '.jpg');
+      if (resp && resp.url) fotosUrls.push(section + '::' + resp.url);
+    } catch(err) { console.warn('Error foto:', err); }
+  }
+}
+if (fotosUrls.length > 0) {
+  try {
+    await gsSend({ type: 'update_fotos', visita_id: visitaId, fotos_urls: fotosUrls.join('|') });
+    showToast('📷 ' + fotosUrls.length + ' foto(s) guardada(s) en Drive');
+  } catch(err) { console.warn('Error guardando URLs:', err); }
 }
 }
 async function gsSend(payload) {
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxArygDYGQ6uiXinn1aB85isYoq8gURiueJPmPBsiQuRqAUE65JnrY9bAY6GnENbbRX/exec';
-if (payload.type === 'upload_foto') {
-  // Usar form submit via iframe para evitar bloqueo CORS en POST
-  return new Promise((resolve) => {
-    const iframeId = 'upload_frame_' + Date.now();
-    const iframe = document.createElement('iframe');
-    iframe.name = iframeId;
-    iframe.id = iframeId;
-    iframe.style.display = 'none';
-    document.body.appendChild(iframe);
-
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = SCRIPT_URL;
-    form.target = iframeId;
-    form.style.display = 'none';
-
-    const input = document.createElement('input');
-    input.type = 'hidden';
-    input.name = 'data';
-    input.value = JSON.stringify(payload);
-    form.appendChild(input);
-    document.body.appendChild(form);
-
-    // Leer respuesta del iframe
-    let resolved = false;
-    const timeout = setTimeout(() => {
-      if (!resolved) { resolved = true; resolve({status:'ok', url:''}); cleanup(); }
-    }, 15000);
-
-    iframe.onload = () => {
-      if (resolved) return;
-      resolved = true;
-      clearTimeout(timeout);
-      try {
-        const txt = iframe.contentDocument.body.innerText || iframe.contentDocument.body.textContent || '';
-        const j = JSON.parse(txt);
-        resolve(j);
-      } catch(e) { resolve({status:'ok', url:''}); }
-      cleanup();
-    };
-
-    function cleanup() {
-      setTimeout(() => {
-        if (form.parentNode) form.parentNode.removeChild(form);
-        if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
-      }, 1000);
-    }
-
-    form.submit();
-  });
-}
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwjRczG39umNvUFIBQYuVSRrV_qiq5F7GtMnFcw3h2iqJvCTuGeMhwfTmlmWvObGVPB/exec';
 const params = new URLSearchParams({data: JSON.stringify(payload)});
 const r = await fetch(SCRIPT_URL + '?' + params);
 if (!r.ok) throw new Error('Error al guardar (' + r.status + ')');
 const json = await r.json();
 if (json.status === 'error') throw new Error(json.message);
 return json;
+}
+
+async function uploadFoto(visita_id, section, base64, mime, nombre) {
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwjRczG39umNvUFIBQYuVSRrV_qiq5F7GtMnFcw3h2iqJvCTuGeMhwfTmlmWvObGVPB/exec';
+return new Promise((resolve) => {
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', SCRIPT_URL, true);
+  xhr.setRequestHeader('Content-Type', 'text/plain');
+  xhr.timeout = 30000;
+  xhr.onload = () => {
+    try { resolve(JSON.parse(xhr.responseText)); }
+    catch(e) { resolve({status:'ok', url:''}); }
+  };
+  xhr.onerror = () => resolve({status:'ok', url:''});
+  xhr.ontimeout = () => resolve({status:'ok', url:''});
+  xhr.send(JSON.stringify({
+    type: 'upload_foto',
+    visita_id: visita_id,
+    section: section,
+    base64: base64,
+    mime: mime,
+    nombre: nombre
+  }));
+});
 }
 function resetForm() {
 document.getElementById('visitForm').reset();
