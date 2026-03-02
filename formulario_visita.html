@@ -70,6 +70,31 @@ prev: document.getElementById('prev-sala')
 };
 mediaSections['sala'].drop.querySelector('input').addEventListener('change', e => handleMedia(e, 'sala'));
 const mediaStore = { sala: [], bodegas: [], comercial: [], general: [] };
+const incMediaStore = {}; // { incN: [File, ...] }
+
+function handleIncMedia(e, n) {
+  if (!incMediaStore[n]) incMediaStore[n] = [];
+  const files = Array.from(e.target.files);
+  const prev = document.getElementById('inc-prev-' + n);
+  files.forEach(file => {
+    incMediaStore[n].push(file);
+    const url = URL.createObjectURL(file);
+    const item = document.createElement('div');
+    item.className = 'prev-item';
+    item.innerHTML = `<img src="${url}"><button type="button" class="px" onclick="removeIncMedia(this,'${url}',${n})">✕</button>`;
+    prev.appendChild(item);
+  });
+  e.target.value = '';
+}
+
+function removeIncMedia(btn, url, n) {
+  URL.revokeObjectURL(url);
+  const item = btn.parentElement;
+  const prev = item.parentElement;
+  const idx = Array.from(prev.children).indexOf(item);
+  if (incMediaStore[n]) incMediaStore[n].splice(idx, 1);
+  item.remove();
+}
 function handleMedia(e, section) {
 const files = Array.from(e.target.files);
 const prevRow = document.getElementById('prev-' + section) || mediaSections[section]?.prev;
@@ -122,6 +147,8 @@ responsable: form.querySelector(`[name="inc_resp_${n}"]`)?.value || '',
 area: form.querySelector(`[name="inc_area_${n}"]`)?.value || '',
 fecha_seguimiento: form.querySelector(`[name="inc_fecha_${n}"]`)?.value || '',
 estado: form.querySelector(`[name="inc_estado_${n}"]`)?.value || '',
+incN: n,
+fotos_urls: '',
 });
 });
 return {
@@ -195,9 +222,32 @@ for (const [section, files] of Object.entries(fotosCopy)) {
 if (fotosUrls.length > 0) {
   try {
     await gsSend({ type: 'update_fotos', visita_id: visitaId, fotos_urls: fotosUrls.join('|') });
-    showToast('📷 ' + fotosUrls.length + ' foto(s) guardada(s) en la nube');
-  } catch(err) { console.warn('Error guardando URLs:', err); }
+  } catch(err) { console.warn('Error guardando URLs visita:', err); }
 }
+
+// Subir fotos de incidencias
+for (const [incN, files] of Object.entries(incMediaStore)) {
+  if (!files || files.length === 0) continue;
+  const incUrls = [];
+  for (const file of files) {
+    if (!file.type.startsWith('image/')) continue;
+    try {
+      const b64 = await resizeImage(file, 1200);
+      if (!b64) continue;
+      const resp = await uploadFoto(visitaId, 'inc_' + incN, b64, 'image/jpeg', 'inc_' + incN + '_' + Date.now() + '.jpg');
+      if (resp && resp.url) incUrls.push(resp.url);
+    } catch(e) { console.warn('Error foto incidencia:', e); }
+  }
+  if (incUrls.length > 0) {
+    try {
+      await gsSend({ type: 'update_inc_fotos', visita_id: visitaId, inc_n: incN, fotos_urls: incUrls.join('|') });
+    } catch(e) { console.warn('Error guardando fotos incidencia:', e); }
+  }
+}
+
+const totalFotos = fotosUrls.length + Object.values(incMediaStore).flat().length;
+if (totalFotos > 0) showToast('📷 ' + totalFotos + ' foto(s) guardada(s) en la nube');
+if (confirm('✅ Visita y fotos guardadas. ¿Ver el Dashboard?')) window.location.href = 'dashboard.html';
 }
 
 async function submitForm(e) {
@@ -236,8 +286,11 @@ try {
   showToast(tieneFotos ? '✅ Visita guardada. Subiendo fotos...' : '✅ Visita guardada correctamente');
   resetForm();
 
-  // Subir fotos en background con la copia
-  if (tieneFotos) uploadFotosBackground(data.id, fotosCopy);
+  if (tieneFotos) {
+    uploadFotosBackground(data.id, fotosCopy); // popup sale al terminar fotos
+  } else {
+    setTimeout(() => { if (confirm('✅ Visita guardada. ¿Ver el Dashboard?')) window.location.href = 'dashboard.html'; }, 800);
+  }
 
 } catch (err) {
   console.error(err);
@@ -263,7 +316,7 @@ async function uploadFoto(visita_id, section, base64, mime, nombre) {
   return { status: 'ok', url: j.secure_url };
 }
 async function gsSend(payload) {
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwjRczG39umNvUFIBQYuVSRrV_qiq5F7GtMnFcw3h2iqJvCTuGeMhwfTmlmWvObGVPB/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx_zKtpNOU9iTmclsL6efkdo6yXtfXigo_5W3Gxry6c4912C1FeYqzgsUXcDRL7uhpi/exec';
 const params = new URLSearchParams({data: JSON.stringify(payload)});
 const r = await fetch(SCRIPT_URL + '?' + params);
 if (!r.ok) throw new Error('Error al guardar (' + r.status + ')');
@@ -280,9 +333,10 @@ incN = 0;
 addIncident();
 document.getElementById('f_fecha').valueAsDate = new Date();
 Object.keys(mediaStore).forEach(k => { mediaStore[k] = []; });
+Object.keys(incMediaStore).forEach(k => { delete incMediaStore[k]; });
 Object.values(mediaSections).forEach(s => { if (s.prev) s.prev.innerHTML = ''; });
 updateProgress();
-setTimeout(() => { if (confirm('✅ Visita guardada. ¿Ver el Dashboard?')) window.location.href = 'dashboard.html'; }, 800);
+// El popup del dashboard se muestra desde uploadFotosBackground al terminar
 }
 function showToast(msg, type = 'ok') {
 const t = document.getElementById('toast');
