@@ -15,7 +15,7 @@ incidenciasMap = {};
 (ij.data || []).forEach(r => {
 const vid = r[0];
 if (!incidenciasMap[vid]) incidenciasMap[vid] = [];
-incidenciasMap[vid].push({tipo:r[4],descripcion:r[5],criticidad:r[6],responsable:r[7],area:r[8],fecha_seguimiento:r[9],estado:r[10]});
+incidenciasMap[vid].push({tipo:r[4],descripcion:r[5],criticidad:r[6],responsable:r[7],area:r[8],fecha_seguimiento:r[9],estado:r[10],fotos_urls:r[11]||''});
 });
 visits = (vj.data || []).map(r => {
 const vid = r[0];
