@@ -179,6 +179,29 @@ img.onerror = () => { URL.revokeObjectURL(url); resolve(''); };
 img.src = url;
 });
 }
+async function uploadFotosBackground(visitaId) {
+const fotosUrls = [];
+for (const [section, files] of Object.entries(mediaStore)) {
+  for (const file of files) {
+    if (!file.type.startsWith('image/')) continue;
+    try {
+      const base64 = await resizeImage(file, 1200);
+      if (!base64) continue;
+      const resp = await uploadFoto(visitaId, section, base64, 'image/jpeg', section + '_' + Date.now() + '.jpg');
+      if (resp && resp.url) fotosUrls.push(section + '::' + resp.url);
+    } catch(err) { console.warn('Error foto:', err); }
+  }
+}
+if (fotosUrls.length > 0) {
+  try {
+    await gsSend({ type: 'update_fotos', visita_id: visitaId, fotos_urls: fotosUrls.join('|') });
+    showToast('📷 ' + fotosUrls.length + ' foto(s) guardada(s) en la nube');
+  } catch(err) { console.warn('Error guardando URLs:', err); }
+} else {
+  console.log('Sin fotos para subir o mediaStore vacío');
+}
+}
+
 async function submitForm(e) {
 e.preventDefault();
 const data = collectData();
