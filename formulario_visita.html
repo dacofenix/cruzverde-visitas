@@ -206,7 +206,7 @@ img.onerror = () => { URL.revokeObjectURL(url); resolve(''); };
 img.src = url;
 });
 }
-async function uploadFotosBackground(visitaId, fotosCopy) {
+async function uploadFotosBackground(visitaId, fotosCopy, incFotosCopy = {}) {
 const fotosUrls = [];
 for (const [section, files] of Object.entries(fotosCopy)) {
   for (const file of files) {
@@ -226,7 +226,7 @@ if (fotosUrls.length > 0) {
 }
 
 // Subir fotos de incidencias
-for (const [incN, files] of Object.entries(incMediaStore)) {
+for (const [incN, files] of Object.entries(incFotosCopy)) {
   if (!files || files.length === 0) continue;
   const incUrls = [];
   for (const file of files) {
@@ -282,12 +282,20 @@ try {
     });
   }
 
+  // Copiar incMediaStore ANTES de resetear
+  const incFotosCopy = {};
+  for (const [n, files] of Object.entries(incMediaStore)) {
+    if (files && files.length > 0) incFotosCopy[n] = [...files];
+  }
+
   const tieneFotos = Object.values(fotosCopy).some(arr => arr.length > 0);
-  showToast(tieneFotos ? '✅ Visita guardada. Subiendo fotos...' : '✅ Visita guardada correctamente');
+  const tieneIncFotos = Object.values(incFotosCopy).some(arr => arr.length > 0);
+
+  showToast((tieneFotos || tieneIncFotos) ? '✅ Visita guardada. Subiendo fotos...' : '✅ Visita guardada correctamente');
   resetForm();
 
-  if (tieneFotos) {
-    uploadFotosBackground(data.id, fotosCopy); // popup sale al terminar fotos
+  if (tieneFotos || tieneIncFotos) {
+    uploadFotosBackground(data.id, fotosCopy, incFotosCopy);
   } else {
     setTimeout(() => { if (confirm('✅ Visita guardada. ¿Ver el Dashboard?')) window.location.href = 'dashboard.html'; }, 800);
   }
