@@ -221,25 +221,20 @@ try {
 }
 }
 
-async function uploadFotosBackground(visitaId) {
-const fotosUrls = [];
-for (const [section, files] of Object.entries(mediaStore)) {
-  for (const file of files) {
-    if (!file.type.startsWith('image/')) continue;
-    try {
-      const base64 = await resizeImage(file, 900);
-      if (!base64) continue;
-      const resp = await uploadFoto(visitaId, section, base64, 'image/jpeg', section + '_' + Date.now() + '.jpg');
-      if (resp && resp.url) fotosUrls.push(section + '::' + resp.url);
-    } catch(err) { console.warn('Error foto:', err); }
-  }
-}
-if (fotosUrls.length > 0) {
-  try {
-    await gsSend({ type: 'update_fotos', visita_id: visitaId, fotos_urls: fotosUrls.join('|') });
-    showToast('📷 ' + fotosUrls.length + ' foto(s) guardada(s) en Drive');
-  } catch(err) { console.warn('Error guardando URLs:', err); }
-}
+async function uploadFoto(visita_id, section, base64, mime, nombre) {
+  // Upload directo a Cloudinary — sin CORS, sin límite de tamaño
+  const formData = new FormData();
+  formData.append('file', base64);
+  formData.append('upload_preset', 'cruzverde');
+  formData.append('folder', 'cruzverde/' + visita_id);
+  formData.append('public_id', section + '_' + Date.now());
+  const r = await fetch('https://api.cloudinary.com/v1_1/dgmxhq9ev/image/upload', {
+    method: 'POST',
+    body: formData
+  });
+  if (!r.ok) throw new Error('Cloudinary error ' + r.status);
+  const j = await r.json();
+  return { status: 'ok', url: j.secure_url };
 }
 async function gsSend(payload) {
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwjRczG39umNvUFIBQYuVSRrV_qiq5F7GtMnFcw3h2iqJvCTuGeMhwfTmlmWvObGVPB/exec';
