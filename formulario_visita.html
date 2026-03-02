@@ -179,9 +179,9 @@ img.onerror = () => { URL.revokeObjectURL(url); resolve(''); };
 img.src = url;
 });
 }
-async function uploadFotosBackground(visitaId) {
+async function uploadFotosBackground(visitaId, fotosCopy) {
 const fotosUrls = [];
-for (const [section, files] of Object.entries(mediaStore)) {
+for (const [section, files] of Object.entries(fotosCopy)) {
   for (const file of files) {
     if (!file.type.startsWith('image/')) continue;
     try {
@@ -197,8 +197,6 @@ if (fotosUrls.length > 0) {
     await gsSend({ type: 'update_fotos', visita_id: visitaId, fotos_urls: fotosUrls.join('|') });
     showToast('📷 ' + fotosUrls.length + ' foto(s) guardada(s) en la nube');
   } catch(err) { console.warn('Error guardando URLs:', err); }
-} else {
-  console.log('Sin fotos para subir o mediaStore vacío');
 }
 }
 
@@ -209,7 +207,12 @@ const btn = document.getElementById('btnSubmit');
 data.id = Date.now().toString();
 data.fotos_urls = '';
 
-// Guardar en localStorage
+// Copiar fotos ANTES de resetear el formulario
+const fotosCopy = {};
+for (const [section, files] of Object.entries(mediaStore)) {
+  if (files.length > 0) fotosCopy[section] = [...files];
+}
+
 const visits = JSON.parse(localStorage.getItem('vl_visits') || '[]');
 visits.push(data);
 localStorage.setItem('vl_visits', JSON.stringify(visits));
@@ -218,7 +221,6 @@ btn.disabled = true;
 btn.querySelector('span').textContent = '⏳ Guardando...';
 
 try {
-  // 1. Guardar visita e incidencias primero
   await gsSend({...data, type: 'visita'});
   for (const inc of (data.incidencias || [])) {
     await gsSend({
@@ -229,13 +231,14 @@ try {
       fecha_seguimiento: inc.fecha_seguimiento, estado: inc.estado || 'Pendiente'
     });
   }
-  showToast('✅ Visita guardada. Subiendo fotos...');
 
-  // 2. Subir fotos en background (no bloqueante)
-  const visitaId = data.id;
-  uploadFotosBackground(visitaId);
-
+  const tieneFotos = Object.values(fotosCopy).some(arr => arr.length > 0);
+  showToast(tieneFotos ? '✅ Visita guardada. Subiendo fotos...' : '✅ Visita guardada correctamente');
   resetForm();
+
+  // Subir fotos en background con la copia
+  if (tieneFotos) uploadFotosBackground(data.id, fotosCopy);
+
 } catch (err) {
   console.error(err);
   showToast('⚠ ' + err.message, 'error');
