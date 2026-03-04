@@ -318,6 +318,7 @@ try {
     await gsSend({
       type: 'incidencia',
       visita_id: data.id, codigo: data.codigo, nombre: data.nombre, ciudad: data.ciudad,
+      tab: inc.tab || 'general',
       tipo: inc.tipo, descripcion: inc.descripcion, criticidad: inc.criticidad,
       responsable: inc.responsable, area: inc.area,
       fecha_seguimiento: inc.fecha_seguimiento, estado: inc.estado || 'Pendiente'
@@ -366,7 +367,7 @@ async function uploadFoto(visita_id, section, base64, mime, nombre) {
   return { status: 'ok', url: j.secure_url };
 }
 async function gsSend(payload) {
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx_zKtpNOU9iTmclsL6efkdo6yXtfXigo_5W3Gxry6c4912C1FeYqzgsUXcDRL7uhpi/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzOpRCluS3iSYiCM7HKK79sCl070NZO8Z_jwOgjjb4p6prb1c2Uih3OU9tOEQYgtC3L/exec';
 const params = new URLSearchParams({data: JSON.stringify(payload)});
 const r = await fetch(SCRIPT_URL + '?' + params);
 if (!r.ok) throw new Error('Error al guardar (' + r.status + ')');
