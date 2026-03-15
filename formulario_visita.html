@@ -442,7 +442,7 @@ async function uploadFoto(visita_id, section, base64, mime, nombre) {
 }
 
 async function gsSend(payload) {
-  const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzOpRCluS3iSYiCM7HKK79sCl070NZO8Z_jwOgjjb4p6prb1c2Uih3OU9tOEQYgtC3L/exec';
+  const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxxBBSiXiFD9jCcQc8God2NlQyIfsCOp5OvdJ2a1Trfgxa6rIurezQ0vEuMkuIQ6SXX/exec';
   const params = new URLSearchParams({data: JSON.stringify(payload)});
   const r = await fetch(SCRIPT_URL + '?' + params);
   if (!r.ok) throw new Error('Error al guardar (' + r.status + ')');
@@ -466,7 +466,7 @@ async function buscarVisitaPrevia(codigo) {
 }
 
 function gsSendURL() {
-  return 'https://script.google.com/macros/s/AKfycbzOpRCluS3iSYiCM7HKK79sCl070NZO8Z_jwOgjjb4p6prb1c2Uih3OU9tOEQYgtC3L/exec';
+  return 'https://script.google.com/macros/s/AKfycbxxBBSiXiFD9jCcQc8God2NlQyIfsCOp5OvdJ2a1Trfgxa6rIurezQ0vEuMkuIQ6SXX/exec';
 }
 
 function showRevisitBanner(row) {
